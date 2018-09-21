@@ -1,0 +1,77 @@
+FROM ubuntu:16.04
+MAINTAINER jeffxie@iii.org.tw
+
+WORKDIR /home/postgresql
+
+ENV C_INCLUDE_PATH=/usr/local/include/libbson-1.0/:/usr/local/include/libmongoc-1.0:$C_INCLUDE_PATH \
+    PKG_CONFIG_PATH=mongo-c-driver/src/:mongo-c-driver/src/libbson/srr \
+    ORACLE_HOME=/usr/lib/oracle/12.2/client64/lib \
+    LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ORACLE_HOME/lib \
+    TNS_ADMIN=$ORACLE_HOME \
+    PATH=$PATH:$ORACLE_HOME/bin
+
+COPY dependencies/ /home/postgresql/
+
+RUN  apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8 \
+      && echo "deb http://apt.postgresql.org/pub/repos/apt/ xenial-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+      && apt update \
+      && apt install -y ssh \
+                        software-properties-common \
+                        wget \
+                        postgresql-9.6 \
+                        postgresql-server-dev-9.6 \
+                        postgresql-9.6-cron \
+                        build-essential \
+                        pkg-config \
+                        libtool \
+                        autoconf \
+                        libaio-dev \
+                        alien \
+                        libsybdb5 \
+                        freetds-dev \
+                        freetds-common \
+                        libssl-dev \
+      && cd /home/postgresql/libbson-1.3.1 \
+      && ./autogen.sh \
+      && make \
+      && make install \
+      && cd /home/postgresql/mongo-c-driver-1.3.1 \
+      && ./autogen.sh \
+      && ./configure --with-libbson=system \
+      && make \
+      && make install \
+      && cd /home/postgresql/mongo_fdw-REL-5_2_1 \
+      && ldconfig \
+      && ./autogen.sh --with-master \
+      && make \
+      && make install \
+      && mv /home/postgresql/ld.so.conf /etc/ld.so.conf \
+      && cd /home/postgresql \
+      && alien -i oracle-instantclient12.2-sqlplus-12.2.0.1.0-1.x86_64.rpm \
+      && alien -i oracle-instantclient12.2-basic-12.2.0.1.0-1.x86_64.rpm \
+      && alien -i oracle-instantclient12.2-devel-12.2.0.1.0-1.x86_64.rpm \
+      && ldconfig \
+      && cd /home/postgresql/oracle_fdw_2.0.0 \
+      && make \
+      && make install \
+      && cd /home/postgresql/tds_fdw-1.0.8 \
+      && make USE_PGXS=1 \
+      && make USE_PGXS=1 install 
+
+RUN  mv /home/postgresql/pg_hba.conf /etc/postgresql/9.6/main/pg_hba.conf \
+     && echo "listen_addresses='*'" >> /etc/postgresql/9.6/main/postgresql.conf \
+     && echo "shared_preload_libraries = 'pg_cron'" >> /etc/postgresql/9.6/main/postgresql.conf \
+     && echo "cron.database_name = 'postgres'" >> /etc/postgresql/9.6/main/postgresql.conf \
+     && mkdir -p /var/run/postgresql/9.6-main.pg_stat_tmp \
+     && chown postgres.postgres /var/run/postgresql/9.6-main.pg_stat_tmp -R \
+     && rm oracle-instantclient12.2* \
+     && rm -rf /var/lib/apt/lists/* 
+
+USER postgres
+
+RUN /etc/init.d/postgresql start \
+    && psql --command "ALTER USER postgres WITH PASSWORD 'wjan4219';"
+
+VOLUME  ["/var/lib/postgresql"]
+EXPOSE 5432 28017 27017
+CMD /usr/lib/postgresql/9.6/bin/postgres -D /var/lib/postgresql/9.6/main -c config_file=/etc/postgresql/9.6/main/postgresql.conf

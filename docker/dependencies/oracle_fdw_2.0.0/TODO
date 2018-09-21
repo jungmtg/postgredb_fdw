@@ -1,0 +1,4 @@
+This is a list of things that should be done.
+Help is welcome!
+
+- Map PostgreSQL type "json" (and maybe "jsonb") to Oracle VARCHAR2 and CLOB.

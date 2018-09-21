@@ -1,0 +1,317 @@
+Version 2.0.0, released 2017-09-15
+  Incompatible changes:
+  - Remove the deprecated option "plan_costs", since it is not very useful and
+    is a maintenance burden.  After an upgrade, tables with this option set
+    should be updated with:
+    ALTER FOREIGN TABLE ... OPTIONS (DROP plan_costs);
+
+  Enhancements:
+  - Push down 2-way inner joins in SELECT statements if all conditions
+    can be pushed down.
+    Patch by Tatsuro Yamada, courtesy of NTT OSS Center.
+
+  Bugfixes:
+  - oracle_fdw crashed on Windows if queries use a NULL parameter or
+    an empty subselect.
+    Report by PAscal Lemoy.
+  - Reading "srid.map" sometimes caused errors even if everything was alright.
+    Report by Paul Dziemiela, analysis by Christian Ullrich.
+  - Don't push down expressions with CLOB column references.
+    Because of Oracle's inability to use CLOB in SQL expressions,
+    this could lead to errors like
+       ORA-00932: inconsistent datatypes: expected - got CLOB
+  - Fix bug in "pg_terminate_backend" handling.
+    "pg_terminate_backend" (or SIGTERM) was not handled
+    correctly, since neither the Oracle query was canceled nor did
+    the backend terminate.
+    Reported by Dmitry Chirkin.
+
+Version 1.5.0, released 2016-08-05
+  Enhancements:
+  - Add table option "sample_percent" to ANALYZE very large tables
+    This can speed up ANALYZE significantly.
+    Idea by PAscal Lemoy.
+  - Introduce a table option "prefetch" for the Oracle row prefetch count
+    This can speed up foreign table scans.
+    Per discussion with by PAscal Lemoy and Maurizio De Giorgi.
+  - Push down arbitrary IN and NOT IN expressions
+    Up to now, only lists with constants were considered.
+    Per request from Volkmar Bühringer.
+  - Push down ORDER BY expressions to Oracle from PostgreSQL 9.2 on
+    Only expressions of numeric, date and timestamp datatypes are pushed
+    down, since the string collations in PostgreSQL and Oracle cannot be
+    guaranteed to be the same.
+    Courtesy of NTT OSS Center, patch by Tatsuro Yamada.
+
+  Bugfixes:
+  - Fix errors with now() and date/timestamp parameters in queries
+    This bug was introduced in 1.3.0 and caused errors like
+    ERROR:  error executing query: OCIDateTimeFromText failed to convert parameter
+    DETAIL:  ORA-01843: not a valid month
+    when now() or "current_timestamp" and friends or date/timestamp
+    parameters were used.
+    Report by Li Hailong.
+  - Fix errors when updating date/timestamp columns
+    This bug was also introduced in 1.3.0 and caused errors like
+    ORA-01856: BC/B.C. or AD/A.D. required
+    if the Oracle and PostgreSQL types were different.
+    Report by Stephane Tachoires.
+  - IMPORT FOREIGN SCHEMA sometimes didn't import primary keys
+    Report by Jean-Marc Lessard, fix by PAscal Lemoy.
+  - Fix memory leaks during ANALYZE
+    This caused out of memory errors when large tables were analyzed.
+    Report by Alessio Checcucci.
+  - IMPORT FOREIGN SCHEMA should not tolerate missing remote schema
+    It used to cause a warning, but the SQL standard requires an error.
+    Report by Jean-Marc Lessard.
+  - Fix crash when UPDATEing non-existent columns
+    If a foreign table has more columns than the underlying Oracle table,
+    these additional columns are treated as containing NULLs.
+    However, oracle_fdw crashed on an attempt to change such a column with
+    an UPDATE statement, which should not happen.
+    Reported by Fabien Nicollet.
+  - Fetch all columns from Oracle when the whole row is referenced
+    This problem could lead to wrong NULL values in trigger functions or when
+    the whole column is used in an expression.
+    Reported by Fabien Nicollet.
+
+Version 1.4.0, released 2016-04-08
+  Enhancements:
+  - Add option "readonly" for IMPORT FOREIGN TABLE that sets the foreign table
+    option "readonly" to "true" on all imported foreign tables.
+    Idea by Julien Goux.
+  - Allow foreign tables based on arbitrary Oracle queries.
+    The query, enclosed in parentheses, can be supplied as option "table".
+    Requested by "tsykes", "cirix81" and Julien Goux.
+
+  Bugfixes:
+  - Selecting timestamps with lc_messages other than English caused errors like
+    "ORA-01406: la valeur de la colonne extraite a été tronquée"
+    Report by Damien Szczyt.
+  - Complicated queries could lead to an error like
+    "Internal oracle_fdw error: encountered unknown node type 524."
+    Report by "bartonjd".
+  - PostGIS type "geometry" cannot be found if ArcGIS is installed.
+    Report by "dtoller".
+
+Version 1.3.0, released 2015-12-21
+  Enhancements:
+  - Add support for IMPORT FOREIGN SCHEMA for PostgreSQL 9.5 and higher.
+  - Improve cost estimates by using the row count estimate.
+    Inspiration by Daniele Sevegnani.
+  - Support two-dimensional geometries with an additional measure dimension.
+    Idea by Paul Dziemiela.
+  - Throw an error if oracle_close_connections() is called inside a
+    transaction that modified Oracle data.
+
+  Bugfixes:
+  - The server crashed for the constructs like "<column> = ANY (NULL)".
+    Report and patch by dreckard.
+  - oracle_fdw sometimes failed to recognize the SDO_GEOMETRY data type.
+    Per report from Bevan Jenkins.
+  - Some point geometries were not translated properly.
+    Per report from Bevan Jenkins.
+  - Ignore SDO_GEOMETRY elements with zero SDO_ETYPE.
+    According to Oracle, that is the correct behaviour.
+    Per report from Bevan Jenkins.
+  - Fix EXPLAIN (VERBOSE) for queries containing current_timestamp.
+    This caused "ORA-30081: invalid data type for datetime/interval arithmetic".
+    Noticed by "kkwhite".
+  - Oracle TIMESTAMP(0) fields caused errors like:
+    ERROR: invalid input syntax for type timestamp: "1977-06-09 18:00:00."
+    Also, handling of dates and timestamps before Christ was broken.
+    Report by "abiuan".
+
+Version 1.2.0, released 2015-01-03
+  Enhancements:
+  - Add support for a file "srid.map" to translate SRIDs between Oracle
+    and PostGIS.
+  - If the Oracle session has been terminated outside of a transaction,
+    try to reconnect once.
+    Idea by AVEN.
+
+  Bugfixes:
+  - Prepared statements with parameters can crash.
+    Because of custom plans, this does not manifest until the query has been
+    executed several times in PostgreSQL 9.2 and higher.
+    Per report from Krzysztof Gorczyński and others.
+    This bug was introduced in 1.1.0.
+
+Version 1.1.0, released 2014-12-03
+  Enhancements:
+  - Add efficient support for translating between Oracle SDO_GEOMETRY and
+    PostGIS geometry.  Supported geometry types are POINT, LINE, POLYGON,
+    MULTIPOINT, MULTILINE and MULTIPOLYGON.
+    Courtesy of Oslandia, implemented by Vincent Mora.
+  - Add regression tests for improved quality.
+  - Bind LOB data instead of LOB locators for INSERT and UPDATE.
+    This simplifies the code and makes Oracle triggers on LOB columns
+    behave as expected.
+
+  Bugfixes:
+  - Fix a bug introduced in 1.0.0 that leads to crashes when LOB columns
+    are modified.
+  - Fix several crashes when the foreign table has fewer or more columns
+    than the Oracle table.
+  - Fix a bug that caused "RETURNING <expression>" to return NULL for
+    complex expressions.
+  - Writing date or timestamp columns failed when DateStyle was not ISO.
+  - Reading or writing negative INTERVAL DAY TO SECOND resulted in bad
+    values because the string formats in PostgreSQL and Oracle differ.
+
+Version 1.0.0, released 2014-04-08
+  Enhancements:
+  - Add function oracle_diag(name) for diagnostic purposes.
+    ATTENTION: Use "ALTER EXTENSION oracle_fdw UPDATE" when upgrading
+    from a previous version of oracle_fdw.
+  - Avoid unnecessary local filtering for pushed down WHERE clauses with
+    internal parameters.
+  - Add support for triggers on foreign tables for PostgreSQL 9.4.
+
+  Bugfixes:
+  - Fix logic error that keeps Oracle connections from closing.
+  - Fix "cache lookup failed for type 0" in queries with string parameters.
+    Per report from Adolfho Lopes.
+
+Version 0.9.10 (beta), released 2013-12-24
+  Enhancements:
+  - Add support for INSERT, DELETE and UPDATE.
+    This is a major rewrite that might cause some destabilization in
+    existing functionality.
+  - Add new column option "key" to indicate primary key columns.
+    This is needed for UPDATE and DELETE.
+  - Add new table option "readonly" to forbid data modifying statements.
+  - Improved transaction handling for data modifying statements.
+    COMMIT, ROLLBACK and SAVEPOINT will work as expected.
+  - Add paths for Oracle 12.1 to the Makefile.
+    Patch by Guillaume Lelarge.
+
+  Bugfixes:
+  - Don't try to push down the division operator.
+    That would produce incorrect results for numeric data types.
+
+Version 0.9.9 (beta), released 2013-08-07
+  Enhancements:
+  - Enable build with PostgreSQL 9.3.
+
+  Bugfixes:
+  - Fix error "ORA-01406: fetched column value was truncated"
+    caused by timestamps with precision greater than 6.
+    Per report from David E. Wheeler.
+  - Fix crash with IN lists that do not entirely consist of constants.
+    Per report from Wang Dong.
+  - Fix handling of parameters during pushdown of WHERE conditions.
+    The previous implementation returned incorrect results for certain
+    queries like SELECT ... WHERE colname = (SELECT ...)
+    ATTENTION: Since correct handling of parameters is not possible before
+    PostgreSQL 9.2, query parameters will not be pushed down in PostgreSQL 9.1.
+    This is a regression for cases where this happened to work.
+  - Fix a logical error that can lead to incorrect Oracle WHERE clauses.
+  - Fix a bug that can lead to the incorrect omission of a scan clause,
+    leading to wrong results.
+
+Version 0.9.8 (beta), released 2012-10-16
+  Enhancements:
+  - Add support for pushdown of IN and NOT IN clauses in WHERE conditions.
+    As suggested by Wang Dong.
+
+  Bugfixes:
+  - Add check to make sure that character string data are properly encoded.
+    This is necessary because Oracle does not check this properly.
+    Per report from David E. Wheeler.
+
+Version 0.9.7 (beta), released 2012-09-07
+  Bugfixes:
+  - Avoid failure to describe synonyms under certain conditions.
+    ATTENTION: This constitutes a compatibility break: table and schema names
+    now have to be exactly as they are in Oracle's catalogs, i.e. without
+    double quotes and normally in uppercase.
+    Per report from Bry Lo.
+  - Add paths to Makefile so that we can build with Instant Client RPMs.
+    Noticed by Andrew Theaker.
+  - Fix a memory corruption bug that can lead to crashes, errors and
+    wrong results.
+  - Improve bad performance of "SELECT count(*)" on foreign tables.
+    This is a simple workaround for the (not yet confirmed)
+    Oracle bug 14562530.
+
+Version 0.9.6 (beta), released 2012-06-25
+  Enhancements:
+  - Support Oracle types LONG and LONG RAW.
+    Introduce table option "max_long" (default 32767) to set the maximal
+    length of such columns.
+
+  Bugfixes:
+  - Fix a bug that causes a server crash when the PostgreSQL session is
+    terminated if the only statements involving oracle_fdw during that
+    session were CREATE statements.
+    Per report from Bry Lo.
+
+Version 0.9.5 (beta), released 2012-05-11
+  Enhancements:
+  - Support ANALYZE on foreign tables (from PostgreSQL 9.2 on).
+
+  Bugfixes:
+  - Fix a bug that leads to warnings and sometimes bad results if system
+    columns of the foreign table are referenced.
+  - Fix wrong column width estimates of plan_costs=on.
+
+Version 0.9.4 (beta), released 2012-03-19
+  Enhancements:
+  - Support the new foreign data wrapper API introduced in 9.2.
+    In PostgreSQL 9.2 and above, WHERE conditions that get pushed down to
+    Oracle will not be checked a second time.
+  - Improve error messages for errors during conversion of Oracle data
+    so that the problem can be diagnosed.
+
+  Bugfixes:
+  - Fix uninitialized value that caused intermittent server crashes.
+    Per report from Bruno Voigt.
+  - Rework the handling of errors and transactions.  Now an error should not
+    be able to cause an Oracle transaction to be left open.  This also fixes
+    a bug introduced in 0.9.3 that prevented Oracle errors from being
+    reported as DETAIL message.  Also, all foreign scans in one local query
+    will now be executed within one Oracle transaction if they belong to
+    the same Oracle session.
+  - Rework memory management to exclude memory leaks under all circumstances.
+
+Version 0.9.3 (beta), released 2012-02-07
+  Enhancements:
+  - Add support for PostgreSQL data type "uuid".
+
+  Bugfixes:
+  - After an error message, calls to the foreign server result in this error:
+      error connecting to Oracle: OCITransStart failed to start a transaction
+      ORA-01453: SET TRANSACTION must be first statement of transaction
+    The problem is that the previous transaction was not closed.
+    This used to go unnoticed, the problem now becomes manifest because we
+    explicitly start a serializable transaction.
+    Per reports from Keith Fiske and Bruno Voigt.
+
+Version 0.9.2 (beta), released 2011-12-30
+  Bugfixes:
+  - Fix handling of Oracle BFILE columns.  This was totally broken; attempts
+    to select such columns resulted in the error message
+    'ORA-00932: inconsistent datatypes: expected %s got %s'.
+    Bug report and patch by Dominique Legendre.
+  - Use a serializable transaction in Oracle to make sure that consistent
+    data are retrieved during a rescan.
+
+Version 0.9.1 (beta), released 2011-09-14
+  Bugfixes:
+  - Fix incorrect use of an automatic variable for binding timestamp parameters
+    in Oracle.
+  - Remove unnecessary lvalue casts.
+    These violate the C standard and cause errors on gcc 4.
+    Per report from Dominique Legendre.
+  - Fix lack of support for dropped columns in foreign table.
+    oracle_fdw incorrectly assumed that the n-th PostgreSQL column corresponds
+    to the n-th Oracle column.  This leads to confusion in the presence of
+    dropped columns, which retain an entry in pg_attribute.
+    Per report from Dominique Legendre.
+  - Fix typo that caused wrong and negative sizes being assumed for longer
+    Oracle columns.  This led to palloc() errors and Oracle fetch errors.
+    Per report from Dominique Legendre.
+
+Version 0.9 (beta), released 2011-08-25
+  - initial release
