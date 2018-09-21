@@ -73,5 +73,5 @@ RUN /etc/init.d/postgresql start \
     && psql --command "ALTER USER postgres WITH PASSWORD 'wjan4219';"
 
 VOLUME  ["/var/lib/postgresql"]
-EXPOSE 5432 28017 27017
+EXPOSE 5432 28017 27017 1433 1521
 CMD /usr/lib/postgresql/9.6/bin/postgres -D /var/lib/postgresql/9.6/main -c config_file=/etc/postgresql/9.6/main/postgresql.conf
