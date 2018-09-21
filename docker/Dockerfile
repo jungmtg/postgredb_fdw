@@ -65,7 +65,9 @@ RUN  mv /home/postgresql/pg_hba.conf /etc/postgresql/9.6/main/pg_hba.conf \
      && mkdir -p /var/run/postgresql/9.6-main.pg_stat_tmp \
      && chown postgres.postgres /var/run/postgresql/9.6-main.pg_stat_tmp -R \
      && rm oracle-instantclient12.2* \
-     && rm -rf /var/lib/apt/lists/* 
+     && rm -rf /var/lib/apt/lists/*
+#FIX could not access private key file "/etc/ssl/private/ssl-cert-snakeoil.key": Permission denied
+RUN mkdir /etc/ssl/private-copy; mv /etc/ssl/private/* /etc/ssl/private-copy/; rm -r /etc/ssl/private; mv /etc/ssl/private-copy /etc/ssl/private; chmod -R 0700 /etc/ssl/private; chown -R postgres /etc/ssl/private      
 
 USER postgres
 
